@@ -1,6 +1,6 @@
 # dcpu16
 
-FIXME: write description
+This is set up to be (eventually) a DCPU-16 emulator/compiler/debugger written in clojure
 
 ## Usage
 
