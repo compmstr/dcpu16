@@ -16,7 +16,7 @@
 ;;Registers (A, B, C, X, Y, Z, I, J, O - overflow, SP, PC)
 ;;  Again, unsigned words, so use ints
 (def registers (int-array 11))
-(def register-names [:A :B :C :X :Y :Z :U :J :O :SP :PC])
+(def register-names [:A :B :C :X :Y :Z :I :J :O :SP :PC])
 (def reg->idx (apply hash-map
                      (interleave
                       register-names
@@ -52,6 +52,7 @@
 ;;  2 6-bit values, a evaluated first
 ;;  4 bit opcode
 ;;non-basic opcodes are 6-bit value, 6-bit opcode, 4-bit 0's
+;;  aaaaaaoooooo0000
 ;;Values (6 bits)
 ;;0x00 - 0x07: register (A, B, C, X, Y, Z, I, J) in that order
 ;;0x08 - 0x0f: [register] -- read memory at loc stored in register
@@ -236,20 +237,50 @@
   (let [raw-b (bit-and 63 (bit-shift-right word 10))]
     (get-value raw-b)))
 
+(defn get-ext-op
+  [word]
+  (let [ext-op-code (bit-and 63 (bit-shift-right word 4))]
+    (num->nonbasic-opcode ext-op-code)))
+
 (defn get-next-code
   []
-  (let [next-word (get-next-word)]
+  (let [next-word (get-next-word)
+        op (get-word-op next-word)]
     (if (= next-word 0x0000)
       (do
         (dec-pc)
         nil)
-      {:op (get-word-op next-word)
-       :a (get-word-a next-word)
-       :b (get-word-b next-word)})))
+      (if (= op :NON-BASIC)
+        {:op op
+         :ext-op (get-ext-op next-word)
+         :a (get-word-b next-word)}
+        {:op op
+         :a (get-word-a next-word)
+         :b (get-word-b next-word)}))))
+
+(defn skip-next-code
+  "Advances CP to the next comman"
+  []
+  (get-next-code)
+  nil)
+
+(defmulti run-nonbasic-word
+  (fn [word]
+    (:ext-op word)))
+(defmethod run-nonbasic-word :JSR
+  [word]
+  (dec-sp)
+  (ram-set (reg-get :SP) (reg-get :PC))
+  (reg-set :PC (:val (:a word))))
+  
 
 (defmulti run-word
-  (fn [word] (:op word)))
+  (fn [word]
+    (:op word)))
 
+(defmethod run-word :NON-BASIC
+  [word]
+  (run-nonbasic-word word))
 (defmethod run-word :SET
   [word]
   (set-value (:a word) (:b word)))
@@ -283,27 +314,123 @@
     (set-value (:a word) checked-val)))
 (defmethod run-word :DIV
   [word]
-  (set-value (:a word) (/ (:val (:a word)) (:val (:b word)))))
+  (if (= (:val (:b word)) 0)
+    (do
+      (reg-set :O 0)
+      (set-value (:a word) 0))
+    (do
+      (let [a-val (:val (:a word))
+            b-val (:val (:b word))
+            new-val (/ a-val b-val)
+            overflow (bit-and 0xFFFF (/ (bit-shift-left a-val 16) b-val))]
+        (reg-set :O overflow)
+        (set-value (:a word) new-val)))))
 (defmethod run-word :MOD
   [word]
-  (set-value (:a word) (mod (:val (:a word)) (:val (:b word)))))
+  (if (= (:val (:b word)) 0)
+    (set-value (:a word) 0)
+    (set-value (:a word) (mod (:val (:a word)) (:val (:b word))))))
+(defmethod run-word :SHL
+  [word]
+  (let [new-val (bit-shift-left (:val (:a word)) (:val (:b word)))
+        checked-val (bit-and 0xFFFF new-val)
+        overflow (bit-and (bit-shift-right new-val 16) 0xFFFF)]
+    (reg-set :O overflow)
+    (set-value (:a word) checked-val)))
+(defmethod run-word :SHR
+  [word]
+  (let [a-val (:val (:a word))
+        b-val (:val (:b word))
+        new-val (bit-shift-right a-val b-val)
+        overflow (bit-and 0xFFFF (bit-shift-right (bit-shift-left a-val 16) b-val))]
+    (reg-set :O overflow)
+    (set-value (:a word) new-val)))
+(defmethod run-word :AND
+  [word]
+  (set-value (:a word) (bit-and (:val (:a word)) (:val (:b word)))))
+(defmethod run-word :BOR
+  [word]
+  (set-value (:a word) (bit-or (:val (:a word)) (:val (:b word)))))
+(defmethod run-word :XOR
+  [word]
+  (set-value (:a word) (bit-xor (:val (:a word)) (:val (:b word)))))
+(defmethod run-word :IFE
+  [word]
+  (if (not (= (:val (:a word)) (:val (:b word))))
+    (skip-next-code))) 
+(defmethod run-word :IFN
+  [word]
+  (if (= (:val (:a word)) (:val (:b word)))
+    (skip-next-code)))
+(defmethod run-word :IFG
+  [word]
+  (if (not (> (:val (:a word)) (:val (:b word))))
+    (skip-next-code)))
+(defmethod run-word :IFB
+  [word]
+  (if (= 0 (bit-and (:val (:a word)) (:val (:b word))))
+    (skip-next-code)))
 
 (defn -main [& args]
   (println "dcpu16 emulator/compiler/debugger"))
 
+(defn load-test-code
+  []
+  (let [test-code [0x7c01 0x0030 ;; SET A, 0x30
+                   0x7de1 0x1000 0x0020 ;; SET [0x1000], 0x20
+                   0x7803 0x1000 ;; SUB A, [0x1000]
+                   0xc00d ;; IFN A, 0x10
+                   0x7dc1 0x001a ;; SET PC, crash
+                   ;Do a loopy thing
+                   0xa861 ;; loop: SET I 10
+                   0x7c01 0x2000 ;; SET A, 0x2000
+                   0x2161 0x2000 ;; SET [0x2000+I], [A]
+                   0x8463 ;; SUB I, 1
+                   0x806d ;; IFN I, 0
+                   0x7dc1 0x000d ;; SET PC, loop
+                   ;;Call a subroutine
+                   0x9031 ;; SET X, 0x4
+                   0x7c10 0x18 ;; JSR testsub
+                   0x7dc1 0x001a ;; SET PC, crash
+                   0x9037 ;; :testsub SHL X, 4
+                   0x61c1 ;; SET PC, POP
+                   ;;0x7dc1 0x001a ;; :crash SET PC, crash
+                   ;;Should hang forever now, but X should be 0x40
+                   ]]
+    (dotimes [i (count test-code)]
+      (ram-set i (nth test-code i)))))
+
 (defn test-get
   []
   (reset-pc)
-  (let [code [0x7c01 0x0030 ;; SET A, 0x30
-              0x7de1 0x1000 0x0020 ;; SET [0x1000], 0x20
-              0x7803 0x1000 ;; SUB A, [0x1000]
-              0xc00d ;; IFN A, 0x10
-              0x7dc1 0x001a ;; SET PC, crash
-              ]]
-    (dotimes [i (count code)]
-      (ram-set i (nth code i))))
+  (load-test-code)
   (take-while #(not (nil? %)) (repeatedly get-next-code)))
 
 (defn print-test
   []
   (doseq [i (test-get)] (println i)))
+
+(defn reset-run
+  []
+  (reset-pc)
+  (reset-sp)
+  (load-test-code))
+(defn run-step
+  []
+  (let [next-code (get-next-code)]
+    (println "Code:" next-code)
+    (if (nil? next-code)
+      (println "No more code")
+      (run-word next-code))))
+
+(defn run-slow
+  []
+  (reset-run)
+  (loop [next-code (get-next-code)]
+    (println "Code:" next-code)
+    (if (nil? next-code)
+      (println "No more code")
+      (do
+        (run-word next-code)
+        (Thread/sleep 250)
+        (recur (get-next-code))))))
