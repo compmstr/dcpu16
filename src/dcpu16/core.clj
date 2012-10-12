@@ -423,11 +423,22 @@
       (println "No more code")
       (run-word next-code))))
 
+(defn run-fast
+  []
+  (reset-run)
+  (loop [next-code (get-next-code)]
+    ;;(println "Code:" next-code)
+    (if (nil? next-code)
+      (println "No more code")
+      (do
+        (run-word next-code)
+        (recur (get-next-code))))))
+
 (defn run-slow
   []
   (reset-run)
   (loop [next-code (get-next-code)]
-    (println "Code:" next-code)
+    ;(println "Code:" next-code)
     (if (nil? next-code)
       (println "No more code")
       (do
