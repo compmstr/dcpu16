@@ -1,6 +1,8 @@
 (ns dcpu16.vm
   (:use dcpu16.util))
 
+(def cycles 0)
+
 ;;0x10000 words of ram
 ;;  Each word is unsigned, so using ints
 (defonce ram (int-array 0x10000))
@@ -366,27 +368,27 @@
   (get-next-code)
   nil)
 
-(defmulti run-special-word
+(defmulti run-special-op
   (fn [word]
     (:ext-op word)))
-(defmethod run-special-word :JSR
+(defmethod run-special-op :JSR
   [word]
   (dec-sp)
   (ram-set (reg-get :SP) (reg-get :PC))
   (reg-set :PC (:val (:a word))))
 
-
-(defmulti run-word
+(defmulti run-op
   (fn [word]
+    (def cycles (inc cycles))
     (:op word)))
 
-(defmethod run-word :SPECIAL
+(defmethod run-op :SPECIAL
   [word]
-  (run-special-word word))
-(defmethod run-word :SET
+  (run-special-op word))
+(defmethod run-op :SET
   [word]
   (set-value (:b word) (:a word)))
-(defmethod run-word :ADD
+(defmethod run-op :ADD
   [word]
   (let [new-val (+ (:val (:a word))
                    (:val (:b word)))
@@ -396,7 +398,7 @@
       (reg-set :EX 1)
       (reg-set :EX 0))
     (set-value (:b word) checked-val)))
-(defmethod run-word :SUB
+(defmethod run-op :SUB
   [word]
   (let [new-val (- (:val (:b word))
                    (:val (:a word)))
@@ -406,7 +408,7 @@
       (reg-set :EX 0xFFFF)
       (reg-set :EX 0))
     (set-value (:b word) checked-val)))
-(defmethod run-word :MUL
+(defmethod run-op :MUL
   [word]
   (let [new-val (* (:val (:a word))
                    (:val (:b word)))
@@ -414,7 +416,7 @@
         overflow (bit-and 0xFFFF (bit-shift-right new-val 16))]
     (reg-set :EX overflow)
     (set-value (:a word) checked-val)))
-(defmethod run-word :MLI
+(defmethod run-op :MLI
   [word]
   (let [new-val (* (:val (:a word))
                    (:val (:b word)))
@@ -424,7 +426,7 @@
         overflow (bit-and 0x7FFF (bit-shift-right new-val 15))]
     (reg-set :EX overflow)
     (set-value (:a word) checked-val)))
-(defmethod run-word :DIV
+(defmethod run-op :DIV
   [word]
   (if (= (:val (:b word)) 0)
     (do
@@ -437,19 +439,19 @@
             overflow (bit-and 0xFFFF (/ (bit-shift-left a-val 16) b-val))]
         (reg-set :EX overflow)
         (set-value (:a word) new-val)))))
-(defmethod run-word :MOD
+(defmethod run-op :MOD
   [word]
   (if (= (:val (:b word)) 0)
     (set-value (:a word) 0)
     (set-value (:a word) (mod (:val (:a word)) (:val (:b word))))))
-(defmethod run-word :SHL
+(defmethod run-op :SHL
   [word]
   (let [new-val (bit-shift-left (:val (:a word)) (:val (:b word)))
         checked-val (bit-and 0xFFFF new-val)
         overflow (bit-and (bit-shift-right new-val 16) 0xFFFF)]
     (reg-set :EX overflow)
     (set-value (:a word) checked-val)))
-(defmethod run-word :SHR
+(defmethod run-op :SHR
   [word]
   (let [a-val (:val (:a word))
         b-val (:val (:b word))
@@ -457,32 +459,32 @@
         overflow (bit-and 0xFFFF (bit-shift-right (bit-shift-left a-val 16) b-val))]
     (reg-set :EX overflow)
     (set-value (:a word) new-val)))
-(defmethod run-word :AND
+(defmethod run-op :AND
   [word]
   (set-value (:a word) (bit-and (:val (:a word)) (:val (:b word)))))
-(defmethod run-word :BOR
+(defmethod run-op :BOR
   [word]
   (set-value (:a word) (bit-or (:val (:a word)) (:val (:b word)))))
-(defmethod run-word :XOR
+(defmethod run-op :XOR
   [word]
   (set-value (:a word) (bit-xor (:val (:a word)) (:val (:b word)))))
-(defmethod run-word :IFE
+(defmethod run-op :IFE
   [word]
   (if (not (= (:val (:a word)) (:val (:b word))))
     (skip-next-code)))
-(defmethod run-word :IFN
+(defmethod run-op :IFN
   [word]
   (if (= (:val (:a word)) (:val (:b word)))
     (skip-next-code)))
-(defmethod run-word :IFG
+(defmethod run-op :IFG
   [word]
   (if (not (> (:val (:a word)) (:val (:b word))))
     (skip-next-code)))
-(defmethod run-word :IFB
+(defmethod run-op :IFB
   [word]
   (if (= 0 (bit-and (:val (:a word)) (:val (:b word))))
     (skip-next-code)))
-(defmethod run-word :default
+(defmethod run-op :default
   [word]
   (println "Invalid word operation:" word))
 
@@ -511,32 +513,37 @@
   (reset-sp)
   (load-test-code))
 (defn run-step
-  []
-  (let [next-code (get-next-code)]
-    (println "Code:" next-code)
-    (if (nil? next-code)
-      (println "No more code")
-      (run-word next-code))))
+  "Runs a single step of the vm, returns nil when no more code is available"
+  ([]
+     (run-step {}))
+  ([args]
+     (let [next-code (get-next-code)]
+       (if (= (:debug args) :true)
+        (println "Code:" next-code))
+       (if (nil? next-code)
+         (do
+           (println "No more code")
+           nil)
+         (do
+           (run-op next-code)
+           1)))))
 
 (defn run-fast
   []
   (reset-run)
-  (loop [next-code (get-next-code)]
-    (println "Code:" next-code)
-    (if (nil? next-code)
-      (println "No more code")
-      (do
-        (run-word next-code)
-        (recur (get-next-code))))))
+  (while (run-step)))
+(defn debug-run-fast
+  []
+  (reset-run)
+  (while (run-step {:debug :true})))
 
 (defn run-slow
   []
   (reset-run)
-  (loop [next-code (get-next-code)]
-    (println "Code:" next-code)
-    (if (nil? next-code)
-      (println "No more code")
-      (do
-        (run-word next-code)
-        (Thread/sleep 250)
-        (recur (get-next-code))))))
+  (while (run-step)
+    (Thread/sleep 250)))
+(defn debug-run-slow
+  []
+  (reset-run)
+  (while (run-step {:debug :true})
+    (Thread/sleep 250)))
