@@ -65,42 +65,63 @@
 (defn dec-sp []
   (reg-set :SP (dec (reg-get :SP))))
 
-;;Opcodes are encoded as bbbbbbaaaaaaoooo
-;;  2 6-bit values, a evaluated first
-;;  4 bit opcode
+;;Opcodes are encoded as aaaaaabbbbbooooo
+;;  6-bit value, a
+;;  5-bit value, b
+;;  5 bit opcode
 ;;non-basic opcodes are 6-bit value, 6-bit opcode, 4-bit 0's
 ;;  aaaaaaoooooo0000
-;;Values (6 bits)
-;;0x00 - 0x07: register (A, B, C, X, Y, Z, I, J) in that order
-;;0x08 - 0x0f: [register] -- read memory at loc stored in register
-;;0x10 - 0x17: [next word + register]
-;;       0x18: POP / [SP++]
-;;       0x19: PEEK / [SP]
-;;       0x1A: PUSH / [--SP]
-;;       0x1B: SP
-;;       0x1C: PC
-;;       0x1D: EX -- overflow
-;;       0x1E: [next word]
-;;       0x1F: next word -- literal
-;;0x20-0x3f: literal value 0x00-0x1f
+;;C is time in cycles to look up value or perform opcode
+;;--- Values: (5/6 bits) ---------------------------------------------------------
+;; C | VALUE     | DESCRIPTION
+;;---+-----------+----------------------------------------------------------------
+;; 0 | 0x00-0x07 | register (A, B, C, X, Y, Z, I or J, in that order)
+;; 0 | 0x08-0x0f | [register]
+;; 1 | 0x10-0x17 | [register + next word]
+;; 0 |      0x18 | (PUSH / [--SP]) if in b, or (POP / [SP++]) if in a
+;; 0 |      0x19 | [SP] / PEEK
+;; 1 |      0x1a | [SP + next word] / PICK n
+;; 0 |      0x1b | SP
+;; 0 |      0x1c | PC
+;; 0 |      0x1d | EX
+;; 1 |      0x1e | [next word]
+;; 1 |      0x1f | next word (literal)
+;; 0 | 0x20-0x3f | literal value 0xffff-0x1e (-1..30) (literal) (only for a)
+;; --+-----------+----------------------------------------------------------------
 (def opcodes
-          ;; All take a, b
+          ;; All take b, a
           [:NON-BASIC ;; 0x0 non-basic instruction
-           :SET ;; 0x1 sets a to b
-           :ADD ;; 0x2 set a to a+b, sets EX to 0x0001 if overflow, 0x0 otherwise
-           :SUB ;; 0x3 set a to a-b, sets EX to 0xFFFF if overflow, 0x0 otherwise
-           :MUL ;; 0x4 set a to a*b, sets EX to ((a*b)>>16)&0xFFFF
-           :DIV ;; 0x5 set a to a/b, sets EX to ((a<<16)/b)&0xFFFF, if b==0, sets a and EX to 0x0
-           :MOD ;; 0x6 sets a to a % b, if b == 0, sets a to 0 instead
-           :SHL ;; 0x7 sets a to a<<b, sets EX to ((a<<b)>>16)&0xFFFF
-           :SHR ;; 0x8 sets a to a>>b, sets EX to ((a<<16)>>b)&0xFFFF
-           :AND ;; 0x9 sets a to a&b
-           :BOR ;; 0xa sets a to a|b
-           :XOR ;; 0xb sets a to a^b
-           :IFE ;; 0xc performs next instruction if a==b
-           :IFN ;; 0xd performs next instruction if a!=b
-           :IFG ;; 0xe performs next instruction if a>b
-           :IFB ;; 0xf performs next instruction if (a&b) != 0
+           :SET ;; 0x01 sets b to a
+           :ADD ;; 0x02 set b to b+a, sets EX to 0x0001 if overflow, 0x0 otherwise
+           :SUB ;; 0x03 set b to b-a, sets EX to 0xFFFF if overflow, 0x0 otherwise
+           :MUL ;; 0x04 set b to b*a, sets EX to ((b*a)>>16)&0xFFFF
+           :MLI ;; 0x05 like mul, but a/b are signed
+           :DIV ;; 0x06 set b to b/a, sets EX to ((b<<16)/a)&0xFFFF, if a==0, sets b and EX to 0x0
+           :DVI ;; 0x07 like div, but b/a are signed
+           :MOD ;; 0x08 sets b to b % a, if b == 0, sets b to 0 instead
+           :MDI ;; 0x09 like mod, but b,a are signed
+           :AND ;; 0x0a sets a to b&a
+           :BOR ;; 0x0b sets a to b|a
+           :XOR ;; 0x0c sets a to b^a
+           :SHR ;; 0x0d sets a to b>>a, sets EX to ((b<<16)>>a)&0xFFFF
+           :ASR ;; 0x0e signed b>>a
+           :SHL ;; 0x0f sets a to b<<a, sets EX to ((b<<a)>>16)&0xFFFF
+           :IFB ;; 0x10 performs next instruction if (b&a) != 0
+           :IFC ;; 0x11 performs next instruction if (b&a)==0
+           :IFE ;; 0x12 performs next instruction if b==a
+           :IFN ;; 0x13 performs next instruction if b!=a
+           :IFG ;; 0x14 performs next instruction if b>a
+           :IFA ;; 0x15 performs next instruction if b>a (signed)
+           :IFL ;; 0x16 performs next instruction if b<a
+           :IFU ;; 0x17 performs next instruction if b<a (signed)
+           :R18 ;; 0x18 -reserved-
+           :R19 ;; 0x19 -reserved-
+           :ADX ;; 0x1a sets b to b+a+EX, sets EX to 0x0001 if overflow, 0x0 otherwise
+           :SBX ;; 0x1b set b to b-a+EX, sets EX to 0xFFFF if underflow, 0x0 otherwise
+           :R1C ;; 0x1c -reserved-
+           :R1D ;; 0x1d -reserved-
+           :STI ;; 0x1e sets b to a, then increase I and J by 1
+           :STD ;; 0x1f sets b to a, then decrease I and J by 1
            ])
 (def num->opcode
   (apply hash-map (interleave (range) opcodes)))
@@ -141,8 +162,9 @@
     val))
 
 (defn get-word-op
+  "Get operand from lowest 5 bits of word"
   [word]
-  (num->opcode (bit-and word 0xF)))
+  (num->opcode (bit-and word 0x1F)))
 
 ;; Values: (5/6 bits)
 ;;     0x00-0x07: register (A, B, C, X, Y, Z, I or J, in that order)
@@ -157,8 +179,8 @@
 ;;          0x1e: [next word]
 ;;          0x1f: next word (literal)
 ;;     0x20-0x3f: literal value 0x00-0x1f (literal) only for a
-;;     
-;; * "next word" really means "[PC++]". These increase the word length of the instruction by 1. 
+;;
+;; * "next word" really means "[PC++]". These increase the word length of the instruction by 1.
 ;; * If any instruction tries to assign a literal value, the assignment fails silently. Other than that, the instruction behaves as normal.
 ;; * All values that read a word (0x10-0x17, 0x1e, and 0x1f) take 1 cycle to look up. The rest take 0 cycles.
 ;; * By using 0x18, 0x19, 0x1a as POP, PEEK and PUSH, there's a reverse stack starting at memory location 0xffff. Example: "SET PUSH, 10", "SET X, POP"
@@ -187,6 +209,7 @@
   "Sets the value indicated by val (a get-value structure), and sets it to new-val
    returns new-val on success, nil on failure (ex: when literal value is passed in)"
   [dest src]
+  ;;(println "Dest:" dest " -- Src:" src)
   (let [new-val (if (map? src)
                   (:val src)
                   src)]
@@ -235,12 +258,14 @@
      ))
 
 (defn get-word-a
+  "a-value for word, highest 6 bits"
   [word]
-  (let [raw-a (bit-and 63 (bit-shift-right word 4))]
+  (let [raw-a (bit-and 2r111111 (bit-shift-right word 10))]
      (get-value raw-a :a)))
 (defn get-word-b
+  "b-value for word, highest 5 bits after first 6"
   [word]
-  (let [raw-b (bit-and 63 (bit-shift-right word 10))]
+  (let [raw-b (bit-and 2r11111 (bit-shift-right word 5))]
     (get-value raw-b :b)))
 
 (defn get-ext-op
@@ -265,7 +290,7 @@
          :b (get-word-b next-word)}))))
 
 (defn skip-next-code
-  "Advances CP to the next comman"
+  "Advances CP to the next command"
   []
   (get-next-code)
   nil)
@@ -278,7 +303,7 @@
   (dec-sp)
   (ram-set (reg-get :SP) (reg-get :PC))
   (reg-set :PC (:val (:a word))))
-  
+
 
 (defmulti run-word
   (fn [word]
@@ -289,7 +314,7 @@
   (run-nonbasic-word word))
 (defmethod run-word :SET
   [word]
-  (set-value (:a word) (:b word)))
+  (set-value (:b word) (:a word)))
 (defmethod run-word :ADD
   [word]
   (let [new-val (+ (:val (:a word))
@@ -299,17 +324,17 @@
     (if overflow?
       (reg-set :EX 1)
       (reg-set :EX 0))
-    (set-value (:a word) checked-val)))
+    (set-value (:b word) checked-val)))
 (defmethod run-word :SUB
   [word]
-  (let [new-val (- (:val (:a word))
-                   (:val (:b word)))
+  (let [new-val (- (:val (:b word))
+                   (:val (:a word)))
         checked-val (max new-val 0)
         underflow? (< new-val 0)]
     (if underflow?
       (reg-set :EX 0xFFFF)
       (reg-set :EX 0))
-    (set-value (:a word) checked-val)))
+    (set-value (:b word) checked-val)))
 (defmethod run-word :MUL
   [word]
   (let [new-val (* (:val (:a word))
@@ -373,7 +398,7 @@
 (defmethod run-word :IFE
   [word]
   (if (not (= (:val (:a word)) (:val (:b word))))
-    (skip-next-code))) 
+    (skip-next-code)))
 (defmethod run-word :IFN
   [word]
   (if (= (:val (:a word)) (:val (:b word)))
@@ -386,6 +411,9 @@
   [word]
   (if (= 0 (bit-and (:val (:a word)) (:val (:b word))))
     (skip-next-code)))
+(defmethod run-word :default
+  [word]
+  (println "Invalid word operation:" word))
 
 (defn -main [& args]
   (println "dcpu16 emulator/compiler/debugger"))
@@ -412,6 +440,13 @@
                    ;0x61c1 ;; SET PC, POP
                    ;;0x7dc1 0x001a ;; :crash SET PC, crash
                    ;;Should hang forever now, but X should be 0x40
+                   0x7c01 0x0030 ;; SET A, 0x30
+                   0x7fc1 0x0020 0x1000 ;; SET [0x1000], 0x20
+                   0x7803 0x1000 ;; SUB A, 0x10
+                   0xc013 ;; IFN A, 10
+                   0x7f81 0x0020 ;; SET PC, end(0x20)
+                   0xc0c1 ;; SET I, 10
+                   0x7801 0x2000 ;; SET A, 0x2000
                    ]]
     (dotimes [i (count test-code)]
       (ram-set i (nth test-code i)))))
@@ -471,7 +506,7 @@
 ;;Values:
 ;;  op => keyword
 ;;  ext-op => keyword
-;;  a/b => 
+;;  a/b =>
 ;;    Keys:
 ;;      :type (one of :register :mem-reg :mem-reg-plus :push/pop
 ;;             :peek :pick :sp :pc :ex :mem :next-word :literal)
@@ -479,3 +514,14 @@
 ;;      :register register to use (may be nil)
 (defn compile-word
   [word-info])
+
+(defn compile-word-chunks
+  [a b op]
+  (bit-or
+   (bit-shift-left a 10)
+   (bit-shift-left b 5)
+   op))
+
+(defn pcwc
+  [a b op]
+  (format "%X" (compile-word-chunks a b op)))
