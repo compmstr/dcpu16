@@ -228,9 +228,9 @@
      (<= val 0x07) ; register
      (register-value val)
      (<= val 0x0f) ; [register]
-     (memory-value (reg-get (mod val 0x07)))
+     (memory-value (reg-get (mod val 0x08)))
      (<= val 0x17) ; [register + next word]
-     (memory-value (+ (get-next-word) (reg-get (mod val 0x07))))
+     (memory-value (+ (get-next-word) (reg-get (mod val 0x08))))
      (= val 0x18) ; (PUSH/ [--SP]) if in b (POP / [SP++]) if in a
      (if (= mode :a)
       (let [old-sp (reg-get :SP)]
@@ -445,8 +445,13 @@
                    0x7803 0x1000 ;; SUB A, 0x10
                    0xc013 ;; IFN A, 10
                    0x7f81 0x0020 ;; SET PC, end(0x20)
-                   0xc0c1 ;; SET I, 10
-                   0x7801 0x2000 ;; SET A, 0x2000
+                   0xa8c1 ;; SET I, 10
+                   0x7C01 0x2000 ;; SET A, 0x2000
+                   ;;:loop
+                   0x22c1 0x2000 ;; SET [0x2000+I], [A]
+                   0x84c3 ;; SUB I, 1
+                   0x80d3 ;; IFN I, 0
+                   0xb781 ;; SET PC, loop
                    ]]
     (dotimes [i (count test-code)]
       (ram-set i (nth test-code i)))))
@@ -524,4 +529,8 @@
 
 (defn pcwc
   [a b op]
-  (format "%X" (compile-word-chunks a b op)))
+  (format "0x%X" (compile-word-chunks a b op)))
+
+(defn as-hex
+  [num]
+  (format "0x%X" num))
