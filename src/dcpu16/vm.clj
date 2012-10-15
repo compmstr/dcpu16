@@ -1,7 +1,7 @@
 (ns dcpu16.vm
   (:use dcpu16.util))
 
-(def cycles 0)
+(defonce cycles 0)
 
 ;;0x10000 words of ram
 ;;  Each word is unsigned, so using ints
@@ -11,7 +11,7 @@
   (aset-int ram loc val))
 (defn ram-get
   [loc]
-  (aget ram loc))
+  (aget ^ints ram loc))
 
 ;;Registers (A, B, C, X, Y, Z, I, J, EX - overflow, SP, PC, IA - interrupt access)
 ;;  Again, unsigned words, so use ints
@@ -39,14 +39,14 @@
   (let [reg-idx (register-index register)]
     (if (nil? reg-idx)
       (throw (IllegalArgumentException. (str "Register: " register " Doesn't exist")))
-      (aget registers reg-idx))))
+      (aget ^ints registers reg-idx))))
 (defn reg-set
   "Sets the register to value, returns value"
   [register value]
   (let [reg-idx (register-index register)]
     (if (nil? reg-idx)
       (throw (IllegalArgumentException. (str "Register: " register " Doesn't exist")))
-      (aset registers reg-idx value))))
+      (aset ^ints registers ^Integer reg-idx ^Integer value))))
 
 ;;Program counter
 (defn reset-pc []
@@ -230,7 +230,7 @@
 (defn get-next-word
   "Gets the next word starting at PC, and increments PC"
   []
-  (let [val (aget ram (reg-get :PC))]
+  (let [val (aget ^ints ram (reg-get :PC))]
     (inc-pc)
     val))
 
@@ -422,7 +422,7 @@
                    (:val (:b word)))
         pos? (> new-val 0)
         checked-val (* (if pos? 1 -1)
-                     (bit-and 0x7FFF (Math/abs new-val)))
+                     (bit-and 0x7FFF (Math/abs ^Integer new-val)))
         overflow (bit-and 0x7FFF (bit-shift-right new-val 15))]
     (reg-set :EX overflow)
     (set-value (:a word) checked-val)))

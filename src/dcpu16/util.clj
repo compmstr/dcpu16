@@ -15,4 +15,4 @@
   [num]
   (let [pos? (> num 0)]
     (+ (if pos? 0 (bit-shift-left 1 15))
-       (Math/abs num))))
+       (Math/abs ^Integer num))))

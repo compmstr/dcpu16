@@ -1,3 +1,4 @@
+(set! *warn-on-reflection* true)
 (ns dcpu16.core
   (:require [dcpu16.vm :as vm]))
 
