@@ -439,6 +439,22 @@
             overflow (bit-and 0xFFFF (/ (bit-shift-left a-val 16) b-val))]
         (reg-set :EX overflow)
         (set-value (:a word) new-val)))))
+(defmethod run-op :DVI
+  [word]
+  (if (= (:val (:b word)) 0)
+    (do
+      (reg-set :EX 0)
+      (set-value (:a word) 0))
+    (do
+      (let [a-val (:val (:a word))
+            b-val (:val (:b word))
+            new-val (/ a-val b-val)
+            pos? (> new-val 0)
+            checked-val (* (if pos? 1 -1)
+                           (bit-and 0x7FFF new-val))
+            overflow (bit-and 0xFFFF (/ (bit-shift-left a-val 15) b-val))]
+        (reg-set :EX overflow)
+        (set-value (:a word) checked-val)))))
 (defmethod run-op :MOD
   [word]
   (if (= (:val (:b word)) 0)
@@ -547,3 +563,4 @@
   (reset-run)
   (while (run-step {:debug :true})
     (Thread/sleep 250)))
+
