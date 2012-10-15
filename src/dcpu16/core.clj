@@ -69,7 +69,7 @@
 ;;  6-bit value, a
 ;;  5-bit value, b
 ;;  5 bit opcode
-;;non-basic opcodes are 6-bit value, 6-bit opcode, 4-bit 0's
+;;special opcodes are 6-bit value, 6-bit opcode, 4-bit 0's
 ;;  aaaaaaoooooo0000
 ;;C is time in cycles to look up value or perform opcode
 ;;--- Values: (5/6 bits) ---------------------------------------------------------
@@ -90,7 +90,7 @@
 ;; --+-----------+----------------------------------------------------------------
 (def opcodes
           ;; All take b, a
-          [:NON-BASIC ;; 0x0 non-basic instruction
+          [:SPECIAL ;; 0x0 special instruction
            :SET ;; 0x01 sets b to a
            :ADD ;; 0x02 set b to b+a, sets EX to 0x0001 if overflow, 0x0 otherwise
            :SUB ;; 0x03 set b to b-a, sets EX to 0xFFFF if overflow, 0x0 otherwise
@@ -128,14 +128,84 @@
 (def opcode->num
   (reverse-map num->opcode))
 
-(def nonbasic-opcodes
+;;Special opcodes always have their lower five bits unset, have one value and a
+;;five bit opcode. In binary, they have the format: aaaaaaooooo00000
+;;The value (a) is in the same six bit format as defined earlier.
+;;
+;;--- Special opcodes: (5 bits) --------------------------------------------------
+;; C | VAL  | NAME  | DESCRIPTION
+;;---+------+-------+-------------------------------------------------------------
+;; - | 0x00 | n/a   | reserved for future expansion
+;; 3 | 0x01 | JSR a | pushes the address of the next instruction to the stack,
+;;   |      |       | then sets PC to a
+;; - | 0x02 | -     |
+;; - | 0x03 | -     |
+;; - | 0x04 | -     |
+;; - | 0x05 | -     |
+;; - | 0x06 | -     |
+;; - | 0x07 | -     |
+;; 4 | 0x08 | INT a | triggers a software interrupt with message a
+;; 1 | 0x09 | IAG a | sets a to IA
+;; 1 | 0x0a | IAS a | sets IA to a
+;; 3 | 0x0b | RFI a | disables interrupt queueing, pops A from the stack, then
+;;   |      |       | pops PC from the stack
+;; 2 | 0x0c | IAQ a | if a is nonzero, interrupts will be added to the queue
+;;   |      |       | instead of triggered. if a is zero, interrupts will be
+;;   |      |       | triggered as normal again
+;; - | 0x0d | -     |
+;; - | 0x0e | -     |
+;; - | 0x0f | -     |
+;; 2 | 0x10 | HWN a | sets a to number of connected hardware devices
+;; 4 | 0x11 | HWQ a | sets A, B, C, X, Y registers to information about hardware a
+;;   |      |       | A+(B<<16) is a 32 bit word identifying the hardware id
+;;   |      |       | C is the hardware version
+;;   |      |       | X+(Y<<16) is a 32 bit word identifying the manufacturer
+;; 4+| 0x12 | HWI a | sends an interrupt to hardware a
+;; - | 0x13 | -     |
+;; - | 0x14 | -     |
+;; - | 0x15 | -     |
+;; - | 0x16 | -     |
+;; - | 0x17 | -     |
+;; - | 0x18 | -     |
+;; - | 0x19 | -     |
+;; - | 0x1a | -     |
+;; - | 0x1b | -     |
+;; - | 0x1c | -     |
+;; - | 0x1d | -     |
+;; - | 0x1e | -     |
+;; - | 0x1f | -     |
+;;---+------+-------+-------------------------------------------------------------
+
+(def special-opcodes
           [:RESERVED
-           :JSR ;; a -- pushes address of next instruction on stack, then sets PC to a
+           :JSR ;; a - pushes address of next instruction on stack, then sets PC to a
+           :R02
+           :R03
+           :R04
+           :R05
+           :R06
+           :R07
+           :INT ;; 0x08 - triggers software interrupt with message a
+           :IAG ;; 0x09 - sets a to IA
+           :IAS ;; 0x0a - Sets IA to a
+           :RFI ;; 0x0b - disables interrupt queueing, pops A from stack, then
+                ;;         pops PC from stack
+           :IAQ ;; 0x0c - if a is nonzero, interrupts will be added to the queue instead
+                ;;         of triggered, if zero, interrupts will be triggered as normal again
+           :R0D
+           :R0E
+           :R0F
+           :HWN ;; 0x10 - sets a to number of connected HW devices
+                ;;        A+(B<<16) is 32 bit dword Hardware ID
+                ;;        C is hardware version
+                ;;        X+(Y<<16) is 32 bit dword with manufacturer ID
+           :HWQ ;; 0x11 - sets A/B/C/X/Y registers to info about HW a
+           :HWI ;; 0x12 - sends interrupt to HW a
           ])
-(def num->nonbasic-opcode
-  (apply hash-map (interleave (range) nonbasic-opcodes)))
-(def nonbasic-opcode->num
-  (reverse-map num->nonbasic-opcode))
+(def num->special-opcode
+  (apply hash-map (interleave (range) special-opcodes)))
+(def special-opcode->num
+  (reverse-map num->special-opcode))
 
 ;; SET, AND, BOR and XOR take 1 cycle, plus the cost of a and b
 ;; ADD, SUB, MUL, SHR, and SHL take 2 cycles, plus the cost of a and b
@@ -271,7 +341,7 @@
 (defn get-ext-op
   [word]
   (let [ext-op-code (bit-and 63 (bit-shift-right word 4))]
-    (num->nonbasic-opcode ext-op-code)))
+    (num->special-opcode ext-op-code)))
 
 (defn get-next-code
   []
@@ -281,7 +351,7 @@
       (do
         (dec-pc)
         nil)
-      (if (= op :NON-BASIC)
+      (if (= op :SPECIAL)
         {:op op
          :ext-op (get-ext-op next-word)
          :a (get-word-b next-word)}
@@ -295,10 +365,10 @@
   (get-next-code)
   nil)
 
-(defmulti run-nonbasic-word
+(defmulti run-special-word
   (fn [word]
     (:ext-op word)))
-(defmethod run-nonbasic-word :JSR
+(defmethod run-special-word :JSR
   [word]
   (dec-sp)
   (ram-set (reg-get :SP) (reg-get :PC))
@@ -309,9 +379,9 @@
   (fn [word]
     (:op word)))
 
-(defmethod run-word :NON-BASIC
+(defmethod run-word :SPECIAL
   [word]
-  (run-nonbasic-word word))
+  (run-special-word word))
 (defmethod run-word :SET
   [word]
   (set-value (:b word) (:a word)))
