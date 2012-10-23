@@ -206,9 +206,9 @@
            :HWI ;; 0x12 - sends interrupt to HW a
           ])
 (def num->special-opcode
-  (apply hash-map (interleave (range) special-opcodes)))
+  (doall (apply hash-map (interleave (range) special-opcodes))))
 (def special-opcode->num
-  (reverse-map num->special-opcode))
+  (doall (reverse-map num->special-opcode)))
 
 ;; SET, AND, BOR and XOR take 1 cycle, plus the cost of a and b
 ;; ADD, SUB, MUL, SHR, and SHL take 2 cycles, plus the cost of a and b
@@ -237,7 +237,7 @@
 (defn get-word-op
   "Get operand from lowest 5 bits of word"
   [word]
-  (num->opcode (bit-and word 0x1F)))
+  (bit-and word 0x1F))
 
 ;; Values: (5/6 bits)
 ;;     0x00-0x07: register (A, B, C, X, Y, Z, I or J, in that order)
@@ -349,16 +349,19 @@
 (defn get-next-code
   []
   (let [next-word (get-next-word)
-        op (get-word-op next-word)]
+        opcode (get-word-op next-word)
+        op (num->opcode opcode)]
     (if (= next-word 0x0000)
       (do
         (dec-pc)
         nil)
       (if (= op :SPECIAL)
         {:op op
+         :opcode opcode
          :ext-op (get-ext-op next-word)
          :a (get-word-b next-word)}
         {:op op
+         :opcode opcode
          :a (get-word-a next-word)
          :b (get-word-b next-word)}))))
 
@@ -377,18 +380,13 @@
   (ram-set (reg-get :SP) (reg-get :PC))
   (reg-set :PC (:val (:a word))))
 
-(defmulti run-op
-  (fn [word]
-    (def cycles (inc cycles))
-    (:op word)))
-
-(defmethod run-op :SPECIAL
+(defn run-op_SPECIAL
   [word]
   (run-special-op word))
-(defmethod run-op :SET
+(defn run-op_SET
   [word]
   (set-value (:b word) (:a word)))
-(defmethod run-op :ADD
+(defn run-op_ADD
   [word]
   (let [new-val (+ (:val (:a word))
                    (:val (:b word)))
@@ -398,7 +396,7 @@
       (reg-set :EX 1)
       (reg-set :EX 0))
     (set-value (:b word) checked-val)))
-(defmethod run-op :SUB
+(defn run-op_SUB
   [word]
   (let [new-val (- (:val (:b word))
                    (:val (:a word)))
@@ -408,7 +406,7 @@
       (reg-set :EX 0xFFFF)
       (reg-set :EX 0))
     (set-value (:b word) checked-val)))
-(defmethod run-op :MUL
+(defn run-op_MUL
   [word]
   (let [new-val (* (:val (:a word))
                    (:val (:b word)))
@@ -416,7 +414,7 @@
         overflow (bit-and 0xFFFF (bit-shift-right new-val 16))]
     (reg-set :EX overflow)
     (set-value (:a word) checked-val)))
-(defmethod run-op :MLI
+(defn run-op_MLI
   [word]
   (let [new-val (* (:val (:a word))
                    (:val (:b word)))
@@ -426,7 +424,7 @@
         overflow (bit-and 0x7FFF (bit-shift-right new-val 15))]
     (reg-set :EX overflow)
     (set-value (:a word) checked-val)))
-(defmethod run-op :DIV
+(defn run-op_DIV
   [word]
   (if (= (:val (:b word)) 0)
     (do
@@ -439,7 +437,7 @@
             overflow (bit-and 0xFFFF (/ (bit-shift-left a-val 16) b-val))]
         (reg-set :EX overflow)
         (set-value (:a word) new-val)))))
-(defmethod run-op :DVI
+(defn run-op_DVI
   [word]
   (if (= (:val (:b word)) 0)
     (do
@@ -455,19 +453,21 @@
             overflow (bit-and 0xFFFF (/ (bit-shift-left a-val 15) b-val))]
         (reg-set :EX overflow)
         (set-value (:a word) checked-val)))))
-(defmethod run-op :MOD
+(defn run-op_MOD
   [word]
   (if (= (:val (:b word)) 0)
     (set-value (:a word) 0)
     (set-value (:a word) (mod (:val (:a word)) (:val (:b word))))))
-(defmethod run-op :SHL
+(defn run-op_MDI
+  [word])
+(defn run-op_SHL
   [word]
   (let [new-val (bit-shift-left (:val (:a word)) (:val (:b word)))
         checked-val (bit-and 0xFFFF new-val)
         overflow (bit-and (bit-shift-right new-val 16) 0xFFFF)]
     (reg-set :EX overflow)
     (set-value (:a word) checked-val)))
-(defmethod run-op :SHR
+(defn run-op_SHR
   [word]
   (let [a-val (:val (:a word))
         b-val (:val (:b word))
@@ -475,34 +475,92 @@
         overflow (bit-and 0xFFFF (bit-shift-right (bit-shift-left a-val 16) b-val))]
     (reg-set :EX overflow)
     (set-value (:a word) new-val)))
-(defmethod run-op :AND
+(defn run-op_ASR
+  [word]
+  )
+(defn run-op_AND
   [word]
   (set-value (:a word) (bit-and (:val (:a word)) (:val (:b word)))))
-(defmethod run-op :BOR
+(defn run-op_BOR
   [word]
   (set-value (:a word) (bit-or (:val (:a word)) (:val (:b word)))))
-(defmethod run-op :XOR
+(defn run-op_XOR
   [word]
   (set-value (:a word) (bit-xor (:val (:a word)) (:val (:b word)))))
-(defmethod run-op :IFE
+(defn run-op_IFC
+  [word])
+(defn run-op_IFE
   [word]
   (if (not (= (:val (:a word)) (:val (:b word))))
     (skip-next-code)))
-(defmethod run-op :IFN
+(defn run-op_IFN
   [word]
   (if (= (:val (:a word)) (:val (:b word)))
     (skip-next-code)))
-(defmethod run-op :IFG
+(defn run-op_IFG
   [word]
   (if (not (> (:val (:a word)) (:val (:b word))))
     (skip-next-code)))
-(defmethod run-op :IFB
+(defn run-op_IFA
+  [word])
+(defn run-op_IFL
+  [word])
+(defn run-op_IFU
+  [word])
+(defn run-op_IFB
   [word]
   (if (= 0 (bit-and (:val (:a word)) (:val (:b word))))
     (skip-next-code)))
-(defmethod run-op :default
+(defn run-op_ADX
+  [word]
+  )
+(defn run-op_SBX
+  [word]
+  )
+(defn run-op_STI
+  [word]
+  )
+(defn run-op_STD
+  [word]
+  )
+(defn run-op_default
   [word]
   (println "Invalid word operation:" word))
+
+(def run-op-map
+  {
+   (opcode->num :SET) run-op_SET 
+   (opcode->num :ADD) run-op_ADD 
+   (opcode->num :SUB) run-op_SUB 
+   (opcode->num :MUL) run-op_MUL 
+   (opcode->num :MLI) run-op_MLI 
+   (opcode->num :DIV) run-op_DIV 
+   (opcode->num :DVI) run-op_DVI 
+   (opcode->num :MOD) run-op_MOD 
+   (opcode->num :MDI) run-op_MDI 
+   (opcode->num :AND) run-op_AND 
+   (opcode->num :BOR) run-op_BOR 
+   (opcode->num :XOR) run-op_XOR 
+   (opcode->num :SHR) run-op_SHR 
+   (opcode->num :ASR) run-op_ASR 
+   (opcode->num :SHL) run-op_SHL 
+   (opcode->num :IFB) run-op_IFB 
+   (opcode->num :IFC) run-op_IFC 
+   (opcode->num :IFE) run-op_IFE 
+   (opcode->num :IFN) run-op_IFN 
+   (opcode->num :IFG) run-op_IFG 
+   (opcode->num :IFA) run-op_IFA 
+   (opcode->num :IFL) run-op_IFL 
+   (opcode->num :IFU) run-op_IFU 
+   (opcode->num :ADX) run-op_ADX 
+   (opcode->num :SBX) run-op_SBX 
+   (opcode->num :STI) run-op_STI 
+   (opcode->num :STD) run-op_STD 
+   })
+
+(defn run-op
+  [word]
+  ((run-op-map (:opcode word)) word))
 
 (defn load-test-code
   []
