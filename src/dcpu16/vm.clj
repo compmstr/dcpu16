@@ -1,72 +1,68 @@
 (ns dcpu16.vm
   (:use dcpu16.util))
 
-(defonce cycles 0)
-
+(defn create-vm
+  []
+  {:cycles 0
 ;;0x10000 words of ram
 ;;  Each word is unsigned, so using ints
-(defonce ram (int-array 0x10000))
+   :ram (apply vector (take 0x500 (repeat 0)))
+   :registers (apply vector (take 8 (repeat 0)))
+   :EX 0 :SP 0 :PC 0 :IA 0})
+
+(defonce register-list {:A 0 :B 1 :C 2 :X 3 :Y 4 :Z 5 :I 6 :J 7})
+(defonce vm (ref (create-vm)))
+
+(defn reg-set
+  [reg val]
+  (dosync
+   (ref-set vm
+            (assoc @vm :registers
+              (if (keyword? reg)
+                (assoc (:registers @vm) (register-list reg) val)
+                (assoc (:registers @vm) reg val))))))
+(defn reg-get
+  [reg]
+  (if (keyword? reg)
+    (nth (:registers @vm) (register-list reg))
+    (nth (:registers @vm) reg)))
+
 (defn ram-set
   [loc val]
-  (aset-int ram loc val))
+  (dosync
+   (ref-set vm
+            (assoc @vm :ram (assoc (:ram @vm) loc (bit-and 0xFFFFFF val))))))
 (defn ram-get
   [loc]
-  (aget ^ints ram loc))
+  (nth (:ram @vm) loc))
 
-;;Registers (A, B, C, X, Y, Z, I, J, EX - overflow, SP, PC, IA - interrupt access)
-;;  Again, unsigned words, so use ints
-(def registers (int-array 11))
-(def register-names [:A :B :C :X :Y :Z :I :J :EX :SP :PC :IA])
-(def reg->idx (apply hash-map
-                     (interleave
-                      register-names
-                      (range))))
-(def idx->reg (reverse-map reg->idx))
+(defmacro vm-field
+  [name]
+  `(do (defn ~(symbol (str "set-" name))
+         [val#]
+         (dosync
+          (ref-set vm
+                   (assoc @vm (keyword (quote ~name)) val#))))
+       (defn ~(symbol (str "get-" name))
+         []
+         ((keyword (quote ~name)) @vm))))
 
-(defn register-index
-  "If register is numeric, return register, if it's
-  a symbol, return (reg->idx register)
-  If neither, throw IllegalArgumentException"
-  [register]
-  (if (keyword? register)
-    (reg->idx register)
-    (if (number? register)
-      register
-      (throw (IllegalArgumentException. "Register must be either a number or a keyword")))))
-
-(defn reg-get
-  [register]
-  (let [reg-idx (register-index register)]
-    (if (nil? reg-idx)
-      (throw (IllegalArgumentException. (str "Register: " register " Doesn't exist")))
-      (aget ^ints registers reg-idx))))
-(defn reg-set
-  "Sets the register to value, returns value"
-  [register value]
-  (let [reg-idx (register-index register)]
-    (if (nil? reg-idx)
-      (throw (IllegalArgumentException. (str "Register: " register " Doesn't exist")))
-      (aset ^ints registers ^Integer reg-idx ^Integer value))))
+(vm-field pc)
+(vm-field ia)
+(vm-field ex)
+(vm-field sp)
 
 ;;Program counter
-(defn reset-pc []
-  (reg-set :PC 0))
-(defn set-pc [new-pc]
-  (reg-set :PC new-pc))
-(defn inc-pc []
-  (reg-set :PC (inc (reg-get :PC))))
-(defn dec-pc []
-  (reg-set :PC (dec (reg-get :PC))))
+(defn reset-pc [] (set-pc 0))
+(defn inc-pc [] (set-pc (inc (get-pc))))
+(defn dec-pc [] (set-pc (dec (get-pc))))
 ;;Stack pointer
-(defn reset-sp []
-  (reg-set :SP 0xffff))
-(defn inc-sp []
-  (reg-set :SP (inc (reg-get :SP))))
-(defn dec-sp []
-  (reg-set :SP (dec (reg-get :SP))))
+(defn reset-sp [] (set-sp 0))
+(defn inc-sp [] (set-sp (inc (get-sp))))
+(defn dec-sp [] (set-sp (dec (get-sp))))
 ;;Interrupt Address (IA)
-(defn reset-ia []
-  (reg-set :IA 0))
+(defn reset-ia [] (set-ia 0))
+
 
 ;;Opcodes are encoded as aaaaaabbbbbooooo
 ;;  6-bit value, a
@@ -230,7 +226,7 @@
 (defn get-next-word
   "Gets the next word starting at PC, and increments PC"
   []
-  (let [val (aget ^ints ram (reg-get :PC))]
+  (let [val (ram-get (reg-get :PC))]
     (inc-pc)
     val))
 
@@ -269,7 +265,6 @@
   [reg]
   {:type :register
    :register reg
-   :register-name (idx->reg reg)
    :val (reg-get reg)})
 
 (defn literal-value
