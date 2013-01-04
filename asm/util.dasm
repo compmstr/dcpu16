@@ -1,0 +1,132 @@
+;hw-find -- find a piece of hardware by ID
+;  Put HW ID in A, B (low, high)
+;  Put storage location in C
+;  Put 0 or highest HW id in I
+;  Storage location will be filled with hardware ID, or 0
+:hw-find-highword
+dat 0x0000
+:hw-find-lowword
+dat 0x0000
+:hw-find-storage
+dat 0x0000
+:hw-find
+SET [hw-find-lowword], A
+SET [hw-find-highword], B
+SET [hw-find-storage], C
+SET [C], 0x000
+IFE I, 0x00
+  HWN I
+:hw-find-loop
+  IFE I, 0x00
+    SET PC, hw-find-not-found
+  HWQ I
+  IFN A, [hw-find-lowword]
+    SET PC, hw-find-loop-end
+  IFN B, [hw-find-highword]
+    SET PC, hw-find-loop-end
+  SET X, [hw-find-storage]
+  SET [X], I
+  SET PC, hw-find-end
+:hw-find-loop-end
+  SUB I, 1
+  SET PC, hw-find-loop
+:hw-find-not-found
+  SET X, [hw-find-storage]
+  SET [X], 0x00
+:hw-find-end
+  SET PC, POP
+
+;find the clock
+:find-clock
+SET A, 0xB402
+SET B, 0x12D0
+SET C, clock-hw
+SET I, 0x00
+JSR hw-find
+SET PC, POP
+
+;wait for a tick
+:tick-wait
+SET A, 1
+HWI [clock-hw]
+IFL C, 0x02
+  SET PC, tick-wait
+SET PC, POP
+
+:find-dumper
+SET A, 0x1337
+SET B, 0xB00B
+SET C, dumper-hw
+SET I, 0x00
+JSR hw-find
+SET PC, POP
+
+:find-screen
+SET A, 0xF615
+SET B, 0x7349
+SET C, screen-hw
+SET I, 0x00
+JSR hw-find
+SET PC, POP
+
+:find-keyboard
+SET A, 0x7406
+SET B, 0x30CF
+SET C, keyboard-hw
+SET I 0x00
+JSR hw-find
+SET PC, POP
+
+;Generates a screen char with white on black bg
+;Pass in the character to generate in A
+:generate-char
+ADD A, [char-color]
+SET PC, POP
+
+;Prints a string out
+;X/Y are col/row to start at
+;A is loc of string (null term)
+;B is start of screen memory
+:print-string
+SET I, X
+MUL Y, 0x20
+ADD I, Y
+ADD I, B
+SET J, A
+:print-string-loop
+	SET A, [J]
+	JSR get-high-byte
+	IFE A, 0
+		SET PC, print-string-end
+	JSR generate-char
+	SET [I], A
+	;2nd char
+	SET A, [J]
+	JSR get-low-byte
+	IFE A, 0
+		SET PC, print-string-end
+	JSR generate-char
+	ADD I, 1
+	SET [I], A
+	STI PC, print-string-loop
+:print-string-end
+SET PC, POP
+
+:get-low-byte
+AND A, 0xFF
+SET PC, POP
+:get-high-byte
+AND A, 0xFF00
+SHR A, 0x8
+SET PC, POP
+
+:clock-hw
+dat 0x0000
+:dumper-hw
+dat 0x0000
+:screen-hw
+dat 0x0000
+:char-color
+dat 0xF000
+:keyboard-hw
+dat 0x0000

@@ -1,5 +1,5 @@
 (ns dcpu16.util
-  (:require [clojure.string :as string :only [split trim]]))
+  (:require [clojure.string :as string :only [split trim join]]))
 
 (defn reverse-map [m]
   (apply hash-map (mapcat reverse m)))
@@ -28,3 +28,17 @@
   "Gets a quoted string from the passed in line"
   [s]
   (re-find #"\".+\"" s))
+
+(defn file-exists?
+  [s]
+  (.exists (java.io.File. #^String s)))
+
+(defn get-directory
+  [s]
+  (.getParent (java.io.File. #^String s)))
+
+(defn make-path
+  [& items]
+  (string/join
+   java.io.File/separator
+   items))
