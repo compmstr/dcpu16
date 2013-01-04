@@ -42,3 +42,8 @@
   (string/join
    java.io.File/separator
    items))
+
+(defn within?
+  [val low high]
+  (and (>= val low)
+       (<= val high)))
