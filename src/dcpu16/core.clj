@@ -1,5 +1,6 @@
 (ns dcpu16.core
-  (:require [dcpu16.vm :as vm]))
+  (:require [dcpu16.vm :as vm]
+            [dcpu16.compiler :as compiler]))
 
 
 (defn -main [& args]
@@ -7,7 +8,7 @@
 
 (defn test-get
   []
-  (vm/reset-pc)
+  (vm/reset-PC)
   (vm/load-test-code)
   (take-while #(not (nil? %)) (repeatedly vm/get-next-code)))
 
