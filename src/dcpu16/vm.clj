@@ -1,12 +1,15 @@
 (ns dcpu16.vm
   (:use dcpu16.util))
 
+;;For REPL, hide array elements after 100
+(set! *print-length* 100)
+
 (defn create-vm
   []
   {:cycles 0
 ;;0x10000 words of ram
 ;;  Each word is unsigned, so using ints
-   :ram (apply vector (take 0x500 (repeat 0)))
+   :ram (apply vector (take 0x10000 (repeat 0)))
    :registers (apply vector (take 8 (repeat 0)))
    :EX 0 :SP 0 :PC 0 :IA 0})
 
@@ -37,6 +40,8 @@
   (nth (:ram @vm) loc))
 
 (defmacro vm-field
+  "Create a get/set/inc/dec/reset field for the vm
+   passing in pc for example will create get-pc, set-pc, reset-pc, etc"
   [name]
   `(do (defn ~(symbol (str "set-" name))
          [val#]
@@ -45,24 +50,27 @@
                    (assoc @vm (keyword (quote ~name)) val#))))
        (defn ~(symbol (str "get-" name))
          []
-         ((keyword (quote ~name)) @vm))))
-
-(vm-field pc)
-(vm-field ia)
-(vm-field ex)
-(vm-field sp)
+         ((keyword (quote ~name)) @vm))
+       (defn ~(symbol (str "reset-" name))
+         []
+         (~(symbol (str "set-" name)) 0))
+       (defn ~(symbol (str "inc-" name))
+         []
+         (~(symbol (str "set-" name))
+          (inc (~(symbol (str "get-" name))))))
+       (defn ~(symbol (str "dec-" name))
+         []
+         (~(symbol (str "set-" name))
+          (dec (~(symbol (str "get-" name))))))))
 
 ;;Program counter
-(defn reset-pc [] (set-pc 0))
-(defn inc-pc [] (set-pc (inc (get-pc))))
-(defn dec-pc [] (set-pc (dec (get-pc))))
-;;Stack pointer
-(defn reset-sp [] (set-sp 0))
-(defn inc-sp [] (set-sp (inc (get-sp))))
-(defn dec-sp [] (set-sp (dec (get-sp))))
+(vm-field PC)
 ;;Interrupt Address (IA)
-(defn reset-ia [] (set-ia 0))
-
+(vm-field IA)
+;;Overflow
+(vm-field EX)
+;;Stack pointer
+(vm-field SP)
 
 ;;Opcodes are encoded as aaaaaabbbbbooooo
 ;;  6-bit value, a
@@ -226,8 +234,8 @@
 (defn get-next-word
   "Gets the next word starting at PC, and increments PC"
   []
-  (let [val (ram-get (reg-get :PC))]
-    (inc-pc)
+  (let [val (ram-get (get-PC))]
+    (inc-PC)
     val))
 
 (defn get-word-op
@@ -301,20 +309,20 @@
      (memory-value (+ (get-next-word) (reg-get (mod val 0x08))))
      (= val 0x18) ; (PUSH/ [--SP]) if in b (POP / [SP++]) if in a
      (if (= mode :a)
-      (let [old-sp (reg-get :SP)]
-        (inc-sp)
+      (let [old-sp (get-SP)]
+        (inc-SP)
         (memory-value old-sp))
-      (memory-value (dec-sp)))
+      (memory-value (dec-SP)))
      (= val 0x19) ; PEEK / [SP]
-     (memory-value (reg-get :SP))
+     (memory-value (get-SP))
      (= val 0x1a) ; PICK n / [SP + next word]
-     (memory-value (+ (reg-get :SP) (get-next-word)))
+     (memory-value (+ (get-SP) (get-next-word)))
      (= val 0x1b) ; SP
-     (register-value :SP)
+     (get-SP)
      (= val 0x1c) ; PC
-     (register-value :PC)
+     (get-PC)
      (= val 0x1c) ; O(verflow)
-     (register-value :EX)
+     (get-EX)
      (= val 0x1e) ; [next word]
      (memory-value (get-next-word))
      (= val 0x1f) ; next word literal
@@ -348,7 +356,7 @@
         op (num->opcode opcode)]
     (if (= next-word 0x0000)
       (do
-        (dec-pc)
+        (dec-PC)
         nil)
       (if (= op :SPECIAL)
         {:op op
@@ -371,35 +379,38 @@
     (:ext-op word)))
 (defmethod run-special-op :JSR
   [word]
-  (dec-sp)
-  (ram-set (reg-get :SP) (reg-get :PC))
-  (reg-set :PC (:val (:a word))))
+  (dec-SP)
+  (ram-set (get-SP) (get-PC))
+  (set-PC (:val (:a word))))
 
 (defn run-op_SPECIAL
   [word]
   (run-special-op word))
 (defn run-op_SET
   [word]
+  (println "op-SET")
   (set-value (:b word) (:a word)))
 (defn run-op_ADD
   [word]
+  (println "op-ADD")
   (let [new-val (+ (:val (:a word))
                    (:val (:b word)))
         checked-val (bit-and 0xFFFF new-val)
         overflow? (> new-val checked-val)]
     (if overflow?
-      (reg-set :EX 1)
-      (reg-set :EX 0))
+      (set-EX 1)
+      (set-EX 0))
     (set-value (:b word) checked-val)))
 (defn run-op_SUB
   [word]
+  (println "op-SUB")
   (let [new-val (- (:val (:b word))
                    (:val (:a word)))
         checked-val (max new-val 0)
         underflow? (< new-val 0)]
     (if underflow?
-      (reg-set :EX 0xFFFF)
-      (reg-set :EX 0))
+      (set-EX 0xFFFF)
+      (set-EX 0))
     (set-value (:b word) checked-val)))
 (defn run-op_MUL
   [word]
@@ -407,7 +418,7 @@
                    (:val (:b word)))
         checked-val (bit-and 0xFFFF new-val)
         overflow (bit-and 0xFFFF (bit-shift-right new-val 16))]
-    (reg-set :EX overflow)
+    (set-EX overflow)
     (set-value (:a word) checked-val)))
 (defn run-op_MLI
   [word]
@@ -417,26 +428,26 @@
         checked-val (* (if pos? 1 -1)
                      (bit-and 0x7FFF (Math/abs ^Integer new-val)))
         overflow (bit-and 0x7FFF (bit-shift-right new-val 15))]
-    (reg-set :EX overflow)
+    (set-EX overflow)
     (set-value (:a word) checked-val)))
 (defn run-op_DIV
   [word]
   (if (= (:val (:b word)) 0)
     (do
-      (reg-set :EX 0)
+      (set-EX 0)
       (set-value (:a word) 0))
     (do
       (let [a-val (:val (:a word))
             b-val (:val (:b word))
             new-val (/ a-val b-val)
             overflow (bit-and 0xFFFF (/ (bit-shift-left a-val 16) b-val))]
-        (reg-set :EX overflow)
+        (set-EX overflow)
         (set-value (:a word) new-val)))))
 (defn run-op_DVI
   [word]
   (if (= (:val (:b word)) 0)
     (do
-      (reg-set :EX 0)
+      (set-EX 0)
       (set-value (:a word) 0))
     (do
       (let [a-val (:val (:a word))
@@ -446,7 +457,7 @@
             checked-val (* (if pos? 1 -1)
                            (bit-and 0x7FFF new-val))
             overflow (bit-and 0xFFFF (/ (bit-shift-left a-val 15) b-val))]
-        (reg-set :EX overflow)
+        (set-EX overflow)
         (set-value (:a word) checked-val)))))
 (defn run-op_MOD
   [word]
@@ -460,7 +471,7 @@
   (let [new-val (bit-shift-left (:val (:a word)) (:val (:b word)))
         checked-val (bit-and 0xFFFF new-val)
         overflow (bit-and (bit-shift-right new-val 16) 0xFFFF)]
-    (reg-set :EX overflow)
+    (set-EX overflow)
     (set-value (:a word) checked-val)))
 (defn run-op_SHR
   [word]
@@ -468,7 +479,7 @@
         b-val (:val (:b word))
         new-val (bit-shift-right a-val b-val)
         overflow (bit-and 0xFFFF (bit-shift-right (bit-shift-left a-val 16) b-val))]
-    (reg-set :EX overflow)
+    (set-EX overflow)
     (set-value (:a word) new-val)))
 (defn run-op_ASR
   [word]
@@ -490,6 +501,7 @@
     (skip-next-code)))
 (defn run-op_IFN
   [word]
+  (println "op-IFN")
   (if (= (:val (:a word)) (:val (:b word)))
     (skip-next-code)))
 (defn run-op_IFG
@@ -578,8 +590,8 @@
 
 (defn reset-run
   []
-  (reset-pc)
-  (reset-sp)
+  (reset-PC)
+  (reset-SP)
   (load-test-code))
 (defn run-step
   "Runs a single step of the vm, returns nil when no more code is available"
