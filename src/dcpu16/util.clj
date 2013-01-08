@@ -29,6 +29,14 @@
   [s]
   (re-find #"\".+\"" s))
 
+(defn strip-brackets
+  [s]
+  (apply str (butlast (rest s))))
+(defn square-bracketed?
+  [s]
+  (and (= (first s) \[)
+       (= (last s) \])))
+
 (defn file-exists?
   [s]
   (.exists (java.io.File. #^String s)))
