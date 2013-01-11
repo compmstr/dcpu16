@@ -1,7 +1,6 @@
 (ns dcpu16.core
   (:require [dcpu16.vm :as vm]
-            [dcpu16.encoder :as encoder]
-            [dcpu16.parser :as parser]))
+            [dcpu16.compiler :as compiler]))
 
 
 (defn -main [& args]

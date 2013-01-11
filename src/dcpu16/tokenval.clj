@@ -23,7 +23,7 @@
           (contains? (set "ABCXYZIJ") (first token)))
      :reg,
      (and (square-bracketed? token)
-          (val-reg? (strip-brackets token)))
+          (= :reg (val-type (strip-brackets token))))
      :reg-mem,
      (re-find #"\[[ABCXYZIJ]\+(0X)?\d+\]" token)
      :reg-mem-next,

@@ -1,6 +1,8 @@
 (ns dcpu16.parser
   (:require [clojure.string :only [trim, split] :as string]
-            [dcpu16.codes :as codes])
+            [dcpu16.codes :as codes]
+            [dcpu16.codelistentry :as cle]
+            [dcpu16.tokenval :as tokenval])
   (:use dcpu16.util))
 
 ;;For REPL, hide array elements after 100
@@ -82,9 +84,48 @@
     (update-in codelist
                [:labels]
                #(conj % (Label. label-name (:pos codelist))))))
+(defn find-label
+  "Given a list of labels, and a name to search for, returns the named label"
+  [labels name]
+  (loop [sublst labels]
+    (if (empty? sublst)
+      nil
+      (if (= (:name (first sublst)) name)
+        (first sublst)
+        (recur (rest sublst))))))
+(defn op-type
+  [op-name]
+  (let [op-key (keyword op-name)]
+    (cond
+     (contains? codes/ops op-key) :op
+     (contains? codes/special-ops op-key) :special-op
+     :default nil)))
+(defn process-op
+  [parts]
+  (let [type (op-type (first parts))
+        base {:type type type (keyword (first parts))}]
+    (merge base
+      (case (op-type (first parts))
+        :op {:aval (tokenval/get-val (nth parts 1))
+             :bval (tokenval/get-val (nth parts 2))}
+        :special-op {:aval (tokenval/get-val (nth parts 1))}
+        nil (throw (IllegalArgumentException. (str "Invalid op: " (first parts))))))))
+(defn split-op-line
+  [s]
+  (map #(if (.endsWith #^String % ",")
+          (apply str (butlast %))
+          %)
+       (string/split s #"\s+")))
 (defn process-line
   [s codelist]
-  codelist)
+  (let [entry (process-op (split-op-line s))]
+    (assoc codelist
+      :code-entries
+      (conj (:code-entries codelist)
+            entry)
+      :pos
+      (+ (:pos codelist) (cle/codelist-entry-size entry)))))
+            
 
 (defn- get-include-filename
   [s]

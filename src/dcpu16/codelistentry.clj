@@ -1,4 +1,5 @@
 (ns dcpu16.codelistentry
+  (:require [dcpu16.tokenval :as tokenval])
   (:use dcpu16.util)) 
 
 ;;Codelist entry types:
@@ -12,12 +13,10 @@
   (case (:type entry)
     :op
     (+ 1
-       (tokenval-size (:aval entry) true)
-       (tokenval-size (:bval entry) false)),
+       (tokenval/tokenval-size (:aval entry) true)
+       (tokenval/tokenval-size (:bval entry) false)),
     :special-op
     (+ 1
-       (tokenval-size (:aval entry) true)),
-    :label
-    0,
+       (tokenval/tokenval-size (:aval entry) true)),
     :data
     (:data-size entry)))
