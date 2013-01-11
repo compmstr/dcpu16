@@ -1,5 +1,6 @@
 (ns dcpu16.parser
-  (:require [clojure.string :only [trim, split] :as string])
+  (:require [clojure.string :only [trim, split] :as string]
+            [dcpu16.codes :as codes])
   (:use dcpu16.util))
 
 ;;For REPL, hide array elements after 100
@@ -32,9 +33,48 @@
   [#^String s]
   (line-starts? s ":"))
 
+(defn dat-get-nums
+  [s]
+  (map #(bit-and 0xFFFF (Long/decode %))
+       (string/split s #"\s+")))
+(defn dat-convert-string
+  [s]
+  (loop [accum []
+         subs s]
+    (if (empty? subs)
+      accum
+      (let [cur (map int (take 2 subs))
+            val (+ (first cur)
+                   (if (= (count cur) 1)
+                     0
+                     (bit-shift-left (second cur) 8)))]
+        (recur (conj accum val)
+               (drop 2 subs))))))
+(defn dat-get-string
+  [s]
+  (dat-convert-string
+   (second (re-find #"^\"(.+)\"$" (string/trim s)))))
+(defn dat-convert
+  "Extracts an array of unsigned shorts from passed in data
+   Handles either a list of integer literals or a string, atm"
+  [s]
+  (cond
+   (not (= -1 (.indexOf #^String s (int \")))) (dat-get-string s)
+   true (dat-get-nums s)))
 (defn process-dat
   [s codelist]
-  codelist)
+  ;;take off the "dat" at the start of the line
+  (let [line (string/trim (subs s 3))
+        data (dat-convert line)
+        data-size (count data)]
+    (assoc codelist
+      :code-entries
+      (conj (:code-entries codelist)
+            {:type :data
+             :data data
+             :data-size data-size})
+      :pos
+      (+ (:pos codelist) data-size))))
 (defn process-label
   [s codelist]
   ;;strip off the : at the start of the label
