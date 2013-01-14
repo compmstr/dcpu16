@@ -4,7 +4,15 @@
   (:use dcpu16.util))
 
 (defn encode-op
-  [entry])
+  [entry]
+  (let [aval (tokenval/encode-tokenval (:aval entry) true)
+        bval (tokenval/encode-tokenval (:bval entry) false)]
+    (concat 
+      [(+ (codes/ops (:op entry))
+          (bit-shift-left (first aval) 10)
+          (bit-shift-left (first bval) 5))]
+      (rest aval)
+      (rest bval))))
 (defn encode-special-op
   [entry])
 

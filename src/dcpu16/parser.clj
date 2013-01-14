@@ -106,8 +106,8 @@
         base {:type type type (keyword (first parts))}]
     (merge base
       (case (op-type (first parts))
-        :op {:aval (tokenval/get-val (nth parts 1))
-             :bval (tokenval/get-val (nth parts 2))}
+        :op {:aval (tokenval/get-val (nth parts 2))
+             :bval (tokenval/get-val (nth parts 1))}
         :special-op {:aval (tokenval/get-val (nth parts 1))}
         nil (throw (IllegalArgumentException. (str "Invalid op: " (first parts))))))))
 (defn split-op-line
@@ -171,3 +171,27 @@
            (recur
             (parse-line (first lines) cl)
             (rest lines)))))))
+
+(defn process-label-vals
+"Passed in a parse tree from parse-file, updates all of the a/b values that
+are labels or label-mems with the actual label values"
+  [parse-tree]
+  (let [labels (:labels parse-tree)
+        process-label-val (fn [val]
+                            (if (or
+                                 (= (:type val) :label)
+                                 (= (:type val) :label-mem))
+                              (assoc val :val
+                                     (:code-loc (find-label labels (:label val))))
+                              val))]
+    (assoc parse-tree :code-entries (map (fn [entry]
+                                           (case (:type entry)
+                                             :op
+                                             (update-in
+                                              (update-in entry [:aval] process-label-val)
+                                              [:bval] process-label-val)
+                                             :special-op
+                                             (update-in entry [:aval] process-label-val )
+                                             :true
+                                             entry))
+                                         (:code-entries parse-tree)))))

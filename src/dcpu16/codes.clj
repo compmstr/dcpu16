@@ -1,5 +1,15 @@
 (ns dcpu16.codes)
 
+(def registers
+  {:A 0
+   :B 1
+   :C 2
+   :X 3
+   :Y 4
+   :Z 5
+   :I 6
+   :J 7})
+
 (def ops
   {:SET 0x01 ;; sets b to a
    :ADD 0x02 ;; set b to b+a, sets EX to 0x0001 if overflow, 0x0 otherwise

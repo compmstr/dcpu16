@@ -1,6 +1,7 @@
 (ns dcpu16.tokenval
   (:use dcpu16.util)
-  (:require [clojure.string :as string]))
+  (:require [clojure.string :as string]
+            [dcpu16.codes :as codes]))
 
 ;;Value types:
 ;;reg
@@ -42,10 +43,12 @@
      (and (square-bracketed? token)
           (re-find #"^(0X)?\d+$" (strip-brackets token)))
      :mem-next,
-     (re-find #"^(0X)?\d+$" token)
+     (re-find #"^-?(0X)?[0-9A-F]+$" token)
      :lit,
      true
-     :label)))
+     (if (square-bracketed? token)
+       :label-mem
+       :label))))
 
 (defn get-val
   [raw-token]
@@ -72,8 +75,10 @@
                   :val (Integer/decode (strip-brackets token)))
       :lit (assoc base
              :val (Integer/decode token))
+      :label-mem (assoc base
+                   :label (strip-brackets raw-token))
       :label (assoc base
-               :label token))))
+               :label raw-token))))
 
 (defn tokenval-size
   "if this value requires extra storage, returns 1, else returns 0"
@@ -84,6 +89,32 @@
                  (<= (:val val) 0x1f))
           0
           1)
+   :label 1
+   :label-mem 1
    :reg-mem-next 1
    :pick 1
    0))
+
+(defn encode-tokenval
+"Returns a list of values:
+first element is what is attached to the opcode
+second element, if exists is extra word to encode"
+  [val a?]
+  (case (:type val)
+    :reg [(codes/registers (:reg val))]
+    :reg-mem [(+ 0x08
+                (codes/registers (:reg val)))]
+    :reg-mem-next [(+ 0x10 (codes/registers (:reg val)))
+                          (:val val)]
+    :pushpop [0x18]
+    :peek [0x19]
+    :pick [0x1a (:val val)]
+    :sp [0x1b]
+    :pc [0x1c]
+    :ex [0x1d]
+    :mem-next [0x1e (:val val)]
+    :label [0x1f (:val val)]
+    :label-mem [0x1e (:val val)]
+    :lit (if (and a? (> 0x1f (short->int (:val val))))
+           [(+ 0x20 (:val val))]
+           [0x1f (:val val)])))

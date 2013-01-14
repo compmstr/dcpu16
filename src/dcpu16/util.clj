@@ -55,3 +55,11 @@
   [val low high]
   (and (>= val low)
        (<= val high)))
+
+(defn hex-string
+  [num]
+  (format "0x%04x" num))
+
+(defn binary-string
+  [num]
+  (Integer/toBinaryString num))

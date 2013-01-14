@@ -1,10 +1,23 @@
 (ns dcpu16.core
   (:require [dcpu16.vm :as vm]
-            [dcpu16.compiler :as compiler]))
+            [dcpu16.compiler :as compiler])
+  (:use dcpu16.util))
 
 
 (defn -main [& args]
   (println "dcpu16 emulator/compiler/debugger"))
+
+(defn test-encode
+  []
+  (let [test-code ["SET A, 0x30", "SET [0x1000], 0x20", "SUB A, [0x1000]",
+                   "IFN A, 0x10"]]
+    (map #(println
+           (map hex-string
+                (dcpu16.encoder/encode
+                 (first (:code-entries (dcpu16.parser/process-line
+                                        %
+                                        {:pos 0 :code-entries []})))))) test-code)))
+
 
 (defn test-get
   []
