@@ -58,7 +58,7 @@
 
 (defn hex-string
   [num]
-  (format "0x%04x" num))
+  (format "0x%04x" (short->int num)))
 
 (defn binary-string
   [num]

@@ -14,7 +14,11 @@
       (rest aval)
       (rest bval))))
 (defn encode-special-op
-  [entry])
+  [entry]
+  (let [aval (tokenval/encode-tokenval (:aval entry) true)]
+    (concat [(+ (bit-shift-left (codes/special-ops (:special-op entry)) 5)
+                (bit-shift-left (first aval) 10))]
+            (rest aval))))
 
 (defn encode
   "Takes in a codelist entry, returns a list of unsigned shorts to write out"
