@@ -192,6 +192,5 @@ are labels or label-mems with the actual label values"
                                               [:bval] process-label-val)
                                              :special-op
                                              (update-in entry [:aval] process-label-val )
-                                             :true
-                                             entry))
+                                             entry)) ;; default is return entry
                                          (:code-entries parse-tree)))))
