@@ -46,10 +46,10 @@
     (if (empty? subs)
       accum
       (let [cur (map int (take 2 subs))
-            val (+ (first cur)
+            val (+ (bit-shift-left (first cur) 8)
                    (if (= (count cur) 1)
                      0
-                     (bit-shift-left (second cur) 8)))]
+                     (second cur)))]
         (recur (conj accum val)
                (drop 2 subs))))))
 (defn dat-get-string

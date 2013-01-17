@@ -18,6 +18,12 @@
     (+ (if pos? 0 (bit-shift-left 1 15))
        (Math/abs ^Integer num))))
 
+(defn swap-word-bytes
+  [num]
+  (let [b1 (bit-shift-right (bit-and 0xFF00 num) 8)
+        b2 (bit-and 0xFF num)]
+    (+ b1 (bit-shift-left b2 8))))
+
 (defn line-starts?
   "Checks if a line starts with a particular string, ignoring
    leading whitespace"
