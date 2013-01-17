@@ -3,4 +3,5 @@
   :sourch-path "src"
   :warn-on-reflection true
   :main dcpu16.core
+  :java-source-path "java-src"
   :dependencies [[org.clojure/clojure "1.4.0"]])

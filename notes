@@ -1,0 +1,3 @@
+Java compilation:
+  lein javac -- compiles files under :java-source-path option in project.clj
+  Then can access classes from clojur as normal
