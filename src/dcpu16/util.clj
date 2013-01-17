@@ -14,7 +14,7 @@
 (defn short->int
   "Converts a signed short to an int"
   [num]
-  (let [pos? (> num 0)]
+  (let [pos? (>= num 0)]
     (+ (if pos? 0 (bit-shift-left 1 15))
        (Math/abs ^Integer num))))
 
