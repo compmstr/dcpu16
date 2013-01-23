@@ -1,4 +1,5 @@
 (ns dcpu16.vm
+  (:import [dcpu16 Vm VmLoc])
   (:use dcpu16.util))
 
 ;;For REPL, hide array elements after 100
@@ -13,8 +14,7 @@
    :registers (apply vector (take 8 (repeat 0)))
    :EX 0 :SP 0 :PC 0 :IA 0})
 
-(defonce register-list {:A 0 :B 1 :C 2 :X 3 :Y 4 :Z 5 :I 6 :J 7})
-(defonce vm (ref (create-vm)))
+(defonce vm (Vm.))
 
 (defn reg-set
   [reg val]

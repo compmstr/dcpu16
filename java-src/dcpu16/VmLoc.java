@@ -4,12 +4,20 @@ public class VmLoc{
 
 		int val;
 		int extraWord;
+		Vm vm;
 		/**
-		 * Construct a VmLoc, passing in the 5/6 bit value indicator
+		 * Construct a VmLoc
+		 **/
+		public VmLoc(Vm vm){
+				this.vm = vm;
+		}
+		/**
+		 * load a new VmLoc from the VM
+		 * passing in the 5/6 bit value indicator
 		 * --may increase PC on the vm when getting value
 		 **/
-		public VmLoc(Vm vm, int val){
-				this.val = val;
+		public void load(final int newVal){
+				this.val = newVal;
 				if(val > 0x0f && val <= 0x17 ||
 					 val == 0x1a ||
 					 val == 0x1e ||
@@ -21,56 +29,67 @@ public class VmLoc{
 		/**
 		 * Sets this vmloc to the provided value in the provided vm
 		 **/
-		public void set(Vm vm, final int newValue){
+		public void set(final int newValue){
 				//Register
 				if(val <= 0x07){
 						vm.regSet(val, newValue);
+						return;
 				}
 				//Register mem
 				if(val <= 0x0f){
 						vm.ramSet(vm.regGet(val - 0x08), newValue);
+						return;
 				}
 				//Register mem + offset
 				if(val <= 0x17){
 						//TODO: this will cause the getNextWord to be called too many times...
 						vm.ramSet(vm.regGet(val - 0x08) + extraWord, newValue);
+						return;
 				}
 				//PUSH
 				if(val == 0x18){
 						vm.ramSet(vm.pushSP(), newValue);
+						return;
 				}
 				//PEEK
 				if(val == 0x19){
 						vm.ramSet(vm.getSP(), newValue);
+						return;
 				}
 				//PICK
 				if(val == 0x1a){
 						//TODO: this will cause the getNextWord to be called too many times...
 						vm.ramSet(vm.getSP() + extraWord, newValue);
+						return;
 				}
 				//SP
 				if(val == 0x1b){
 						vm.setSP(newValue);
+						return;
 				}
 				//PC
 				if(val == 0x1c){
 						vm.setPC(newValue);
+						return;
 				}
 				//EX
 				if(val == 0x1d){
 						vm.setEX(newValue);
+						return;
 				}
 				//mem
 				if(val == 0x1e){
 						//TODO: this will cause the getNextWord to be called too many times...
 						vm.ramSet(extraWord, newValue);
+						return;
 				}
 				//next word lit
 				if(val == 0x1f){
 						//fail silently
+						return;
 				}
 		}
-		public int get(Vm vm){
+		public int get(){
 				//Register
 				if(val <= 0x07){
 						return vm.regGet(val);
