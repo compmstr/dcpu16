@@ -39,6 +39,30 @@ public class Vm{
 		public int getNextWord(){
 				return getShort(ramGet(++pc));
 		}
+		public int getSP(){
+				return getShort(sp);
+		}
+		public void setSP(int newVal){
+				sp = newVal;
+		}
+		public int popSP(){
+				return sp++;
+		}
+		public int pushSP(){
+				return --sp;
+		}
+		public int getPC(){
+				return getShort(pc);
+		}
+		public void setPC(int newVal){
+				pc = newVal;
+		}
+		public int getEX(){
+				return getShort(ex);
+		}
+		public void setEX(int newVal){
+				ex = newVal;
+		}
 		/**
 		 * Gets the value requested from the code word
 		 * -- May increase PC while getting next word --
