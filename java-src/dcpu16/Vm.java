@@ -11,8 +11,8 @@ public class Vm{
 		private int[] registers = new int[8];
 		private int[] ram = new int[0x1000];
 
-		private VmLoc aloc = new VmLoc();
-		private VmLoc bloc = new VmLoc();
+		private VmLoc aloc = new VmLoc(this);
+		private VmLoc bloc = new VmLoc(this);
 
 		private static int getShort(final int num){
 				if(num < 0){

@@ -14,7 +14,9 @@
    :registers (apply vector (take 8 (repeat 0)))
    :EX 0 :SP 0 :PC 0 :IA 0})
 
-(defonce vm (Vm.))
+(def register-list (zipmap [:A :B :C :I :J :X :Y :Z] (range 8)))
+;;(defonce vm (Vm.))
+(defonce vm (create-vm))
 
 (defn reg-set
   [reg val]

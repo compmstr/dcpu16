@@ -1,5 +1,5 @@
 (ns dcpu16.core
-  (:import [dcpu16 Vm VmLoc])
+  ;;(:import [dcpu16 Vm VmLoc])
   (:require [dcpu16.vm :as vm]
             [dcpu16.compiler :as compiler])
   (:use dcpu16.util))
@@ -19,11 +19,12 @@
                                         %
                                         {:pos 0 :code-entries []})))))) test-code)))
 
+(comment
 (defn test-vm
   []
   (def vm (Vm.))
   (def aval (VmLoc. vm))
-  (def bval (VmLoc. vm)))
+  (def bval (VmLoc. vm))))
 
 (defn test-get
   []
